@@ -40,29 +40,25 @@ fn main() {
         }
     };
 
-    let mut errors = 0u32;
+    let mut has_error = false;
     for path in &cli.paths {
-        process(path, 0, &cli, broken, &mut errors);
+        if let Err(e) = process(path, 0, &cli, broken) {
+            error!("{}: {}", path.display(), e);
+            has_error = true;
+        }
     }
-    if errors > 0 {
+    if has_error {
         process::exit(1);
     }
 }
 
-/// Process a single path. Errors are reported inline and tracked via `errors` counter.
-fn process(path: &Path, depth: usize, opts: &Cli, broken: &str, errors: &mut u32) {
+/// Process a single path. Errors are reported inline; returns Err to signal failure.
+fn process(path: &Path, depth: usize, opts: &Cli, broken: &str) -> anyhow::Result<()> {
     if opts.max_depth > 0 && depth > opts.max_depth {
-        return;
+        return Ok(());
     }
 
-    let meta = match fs::symlink_metadata(path) {
-        Ok(m) => m,
-        Err(e) => {
-            error!("{}: {}", path.display(), e);
-            *errors += 1;
-            return;
-        }
-    };
+    let meta = fs::symlink_metadata(path).with_context(|| format!("{}", path.display()))?;
 
     if meta.is_symlink() {
         if let Err(e) = deref(path, opts) {
@@ -73,31 +69,30 @@ fn process(path: &Path, depth: usize, opts: &Cli, broken: &str, errors: &mut u32
                 "delete" => {
                     let _ = report(path, "remove (broken symlink)", opts);
                     if let Err(rm_err) = fs::remove_file(path) {
-                        error!("{}: {}", path.display(), rm_err);
-                        *errors += 1;
+                        return Err(
+                            anyhow::Error::from(rm_err).context(format!("{}", path.display()))
+                        );
                     }
                 }
-                _ => {
-                    error!("{}: {}", path.display(), e);
-                    *errors += 1;
-                }
+                _ => return Err(e).context(format!("{}", path.display())),
             }
         }
     } else if meta.is_dir() && opts.recursive {
-        let entries: Vec<_> = match fs::read_dir(path) {
-            Ok(iter) => iter.filter_map(|e| e.ok()).map(|e| e.path()).collect(),
-            Err(e) => {
-                error!("{}: {}", path.display(), e);
-                *errors += 1;
-                return;
-            }
-        };
+        let entries: Vec<_> = fs::read_dir(path)
+            .with_context(|| format!("{}", path.display()))?
+            .map(|e| e.with_context(|| format!("{}", path.display())))
+            .map(|r| r.map(|entry| entry.path()))
+            .collect::<anyhow::Result<Vec<_>>>()?;
         for child in entries {
-            process(&child, depth + 1, opts, broken, errors);
+            if let Err(e) = process(&child, depth + 1, opts, broken) {
+                error!("{}: {}", child.display(), e);
+            }
         }
     } else {
         debug!("{}: not a symlink — skipped", path.display());
     }
+
+    Ok(())
 }
 
 /// Resolve a symlink to its final real path.
