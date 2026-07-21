@@ -59,6 +59,7 @@ clean:
 # 安装到系统（/usr/local/bin/deref + shell 补全 + man）
 
 
+DESTDIR := ""
 PREFIX := "/usr/local"
 BINDIR := PREFIX / "bin"
 DATADIR := PREFIX / "share"
