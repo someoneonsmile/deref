@@ -10,11 +10,11 @@ check:
 
 # 编译 debug 版本
 build:
-    cargo build
+    SHELL_HELP_DIR=shell_help cargo build
 
 # 编译 release 版本（优化）
 release:
-    cargo build --release
+    SHELL_HELP_DIR=shell_help cargo build --release
 
 # 运行（debug）
 run *args:
@@ -54,11 +54,32 @@ fix-strict: fix lint-strict
 # 清理构建产物
 clean:
     cargo clean
+    rm -rf {{ SHELL_HELP_DIR }}
 
-# 安装到系统（/usr/local/bin/deref）
+# 安装到系统（/usr/local/bin/deref + shell 补全 + man）
+
+
+PREFIX := "/usr/local"
+BINDIR := PREFIX / "bin"
+DATADIR := PREFIX / "share"
+MANDIR := DATADIR / "man"
+SHELL_HELP_DIR := "shell_help"
+
 install:
-    cargo build --release
-    sudo install -m 755 target/release/deref /usr/local/bin/deref
+    SHELL_HELP_DIR={{ SHELL_HELP_DIR }} cargo build --release
+    sudo install -Dm755 target/release/deref "{{ DESTDIR }}{{ BINDIR }}/deref"
+    sudo install -Dm644 {{ SHELL_HELP_DIR }}/complete/deref.bash "{{ DESTDIR }}{{ DATADIR }}/bash-completion/completions/deref"
+    sudo install -Dm644 {{ SHELL_HELP_DIR }}/complete/_deref "{{ DESTDIR }}{{ DATADIR }}/zsh/site-functions/_deref"
+    sudo install -Dm644 {{ SHELL_HELP_DIR }}/complete/deref.fish "{{ DESTDIR }}{{ DATADIR }}/fish/vendor_completions.d/deref.fish"
+    sudo install -Dm644 {{ SHELL_HELP_DIR }}/man/deref.1 "{{ DESTDIR }}{{ MANDIR }}/man1/deref.1"
+
+# 从系统中卸载 deref 及其补全和 man 手册页
+uninstall:
+    sudo rm -f "{{ DESTDIR }}{{ BINDIR }}/deref"
+    sudo rm -f "{{ DESTDIR }}{{ DATADIR }}/bash-completion/completions/deref"
+    sudo rm -f "{{ DESTDIR }}{{ DATADIR }}/zsh/site-functions/_deref"
+    sudo rm -f "{{ DESTDIR }}{{ DATADIR }}/fish/vendor_completions.d/deref.fish"
+    sudo rm -f "{{ DESTDIR }}{{ MANDIR }}/man1/deref.1"
 
 # 监听文件变更，自动 check
 watch:
