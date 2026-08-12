@@ -59,9 +59,10 @@ jobs:
       - name: Override version for nightly
         if: inputs.version_suffix != ''
         run: |
-          CURRENT=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)
+          CURRENT=$(awk -F'"' '/^version = /{print $2; exit}' Cargo.toml)
           NEW="${CURRENT}${{ inputs.version_suffix }}"
-          sed -i "s/^version = \"${CURRENT}\"/version = \"${NEW}\"/" Cargo.toml
+          sed -i.bak "1,/^version = /s/^version = \".*\"/version = \"${NEW}\"/" Cargo.toml
+          rm -f Cargo.toml.bak
           echo "Build version: ${NEW}"
 
       - name: Build (native)
